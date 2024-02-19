@@ -1,14 +1,21 @@
 name: Docker
 
-on: [push]
+on: 
+  push:
+    branches:
+      - ubicloud-runner
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  packages: write
+  
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-16
     outputs:
       docker_tag: ${{ steps.prep.outputs.version }}
     strategy:
@@ -89,10 +96,17 @@ jobs:
   node-ci:
     needs: [docker]
     timeout-minutes: 60
-    runs-on: ubicloud
+    runs-on: ${{ matrix.runs-on }}
+    name: node-ci ${{ matrix.runs-on }}
     strategy:
+      fail-fast: false
       matrix:
         node-version: [18.18]
+        runs-on:
+          - ubicloud-standard-2
+          - ubicloud-standard-4
+          - ubicloud-standard-8
+          - ubicloud-standard-16
 
     steps:
       - uses: actions/checkout@v3
@@ -114,29 +128,5 @@ jobs:
         if: always()
         with:
           name: integrationTests
-          path: reports
-          retention-days: 30
-
-  e2e:
-    needs: [docker]
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 18.18
-      - run: ./scripts/dev-init.sh
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-      - name: Integration tests e2e
-        run: npx zx scripts/integration-tests.mjs
-        env:
-          DOCKER_TAG: ${{ needs.docker.outputs.docker_tag }}
-          IS_E2E: true
-      - uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: e2e
           path: reports
           retention-days: 30
